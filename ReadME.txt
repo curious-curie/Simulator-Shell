@@ -1,7 +1,4 @@
 
-CS 324, Winter 2018
-Lab Assignment: Writing Your Own Unix Shell
-Due: Friday, Feb. 2, 11:59PM
 Introduction
 The purpose of this assignment is to become more familiar wit
 h the concepts of process control and sig-
