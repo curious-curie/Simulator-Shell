@@ -190,7 +190,7 @@ void eval(char *cmdline)
         if(!bg){
           int status;
           if(addjob(jobs, pid, FG, cmdline)){
-            printf("adding job to job list FG");
+            printf("adding job to job list FG\n");
           }
           if(waitpid(pid, &status, 0) < 0){
             unix_error("waitfg: waitpid error");
@@ -199,7 +199,7 @@ void eval(char *cmdline)
         else{
             printf("%d %s", pid, cmdline);
             if(addjob(jobs, pid, BG, cmdline))
-              printf("added job to job list BG");
+              printf("added job to job list BG\n");
         }
 }
 
