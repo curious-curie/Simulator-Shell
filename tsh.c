@@ -59,10 +59,10 @@ void eval(char *cmdline);
 int builtin_cmd(char **argv);
 void do_bgfg(char **argv);
 void waitfg(pid_t pid);
-
 void sigchld_handler(int sig);
 void sigtstp_handler(int sig);
 void sigint_handler(int sig);
+
 
 /* Here are helper routines that we've provided for you */
 int parseline(const char *cmdline, char **argv);
@@ -91,7 +91,8 @@ handler_t *Signal(int signum, handler_t *handler);
 int main(int argc, char **argv)
 {
     char c;
-    char cmdline[MAXLINE];
+    char cmdline[MAXLINE] = {'\0'};
+
     int emit_prompt = 1; /* emit prompt (default) */
 
     /* Redirect stderr to stdout (so that driver will get all output
@@ -101,18 +102,18 @@ int main(int argc, char **argv)
     /* Parse the command line */
     while ((c = getopt(argc, argv, "hvp")) != EOF) {
         switch (c) {
-        case 'h':             /* print help message */
+          case 'h':             /* print help message */
             usage();
-	    break;
-        case 'v':             /* emit additional diagnostic info */
-            verbose = 1;
-	    break;
-        case 'p':             /* don't print a prompt */
-            emit_prompt = 0;  /* handy for automatic testing */
-	    break;
-	default:
-            usage();
-	}
+    	    break;
+          case 'v':             /* emit additional diagnostic info */
+                verbose = 1;
+    	    break;
+          case 'p':             /* don't print a prompt */
+                emit_prompt = 0;  /* handy for automatic testing */
+    	     break;
+    	     default:
+                usage();
+    	 }
     }
 
     /* Install the signal handlers */
@@ -131,22 +132,22 @@ int main(int argc, char **argv)
     /* Execute the shell's read/eval loop */
     while (1) {
 
-	/* Read command line */
-	if (emit_prompt) {
-	    printf("%s", prompt);
-	    fflush(stdout);
-	}
-	if ((fgets(cmdline, MAXLINE, stdin) == NULL) && ferror(stdin))
-	    app_error("fgets error");
-	if (feof(stdin)) { /* End of file (ctrl-d) */
-	    fflush(stdout);
-	    exit(0);
-	}
+    	/* Read command line */
+    	if (emit_prompt) {
+    	    printf("%s", prompt);
+    	    fflush(stdout);
+    	}
+    	if ((fgets(cmdline, MAXLINE, stdin) == NULL) && ferror(stdin))
+    	    app_error("fgets error");
+    	if (feof(stdin)) { /* End of file (ctrl-d) */
+    	    fflush(stdout);
+    	    exit(0);
+	    }
 
-	/* Evaluate the command line */
-	eval(cmdline);
-	fflush(stdout);
-	fflush(stdout);
+    	/* Evaluate the command line */
+      eval(cmdline);
+    	fflush(stdout);
+    	fflush(stdout);
     }
 
     exit(0); /* control never reaches here */
@@ -165,37 +166,41 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline)
 {
-    printf("entered eval\n");
-    printf("%s\n", cmdline);
+    char *argv[MAXARGS];
+    char buf[MAXLINE];
+    int bg;
+    pid_t pid = -1;
 
-    switch(cmdline[0]){
-      case 'j':
-        //jobs
-        printf("jobs\n");
-        break;
-      case 'b':
-        //background
-        printf("background\n");
-        break;
-      case 'f':
-        //foreground
-        printf("foreground\n");
-        break;
-      case 'q':
-        //quit
-        printf("quit\n");
-        break;
-      default:
-          //not a command
-          printf("program\n");
-          break;
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv);
 
-    }
+    if(argv[0] == NULL)
+      return; //ignore empty lines
 
+    if(!builtin_cmd(argv)){
+        if((pid = fork()) == 0){ // child runs user Job
+          if (execve(argv[0], argv, environ) < 0) {
+              printf("%s: Command not found.\n", argv[0]);
+              exit(0);
+          }
+        }
+      }
 
-
-
-    return;
+        //parent waits for foreground job to terminate
+        if(!bg){
+          int status;
+          if(addjob(jobs, pid, FG, cmdline)){
+            printf("adding job to job list FG");
+          }
+          if(waitpid(pid, &status, 0) < 0){
+            unix_error("waitfg: waitpid error");
+          }
+        }
+        else{
+            printf("%d %s", pid, cmdline);
+            if(addjob(jobs, pid, BG, cmdline))
+              printf("added job to job list BG");
+        }
 }
 
 /*
@@ -261,6 +266,27 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv)
 {
+
+  if(!strcmp(argv[0], "jobs")){
+    printf("jobs\n");
+    listjobs(jobs);
+    return 1;
+  }
+  else if(!strcmp(argv[0], "bg")){
+    printf("background\n");
+    return 1;
+  }
+  else if(!strcmp(argv[0], "fg")){
+    printf("foreground\n");
+    return 1;
+  }
+  else if(!strcmp(argv[0], "quit")){
+    printf("quit command\n");
+    return 1;
+  }
+  else{
+    printf("exectue a program\n");
+  }
     return 0;     /* not a builtin command */
 }
 
@@ -303,6 +329,13 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
+    printf("sigint - CTRL-c\n");
+    for(unsigned int i = 0; i < MAXJOBS; i++){
+        if(jobs[i].state == 1)
+          kill(jobs[i].pid, SIGKILL);
+          return;
+    }
+
     return;
 }
 
@@ -313,6 +346,9 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig)
 {
+    printf("sigstp - CTRL-z\n");
+    // add job to the list
+
     return;
 }
 
@@ -447,6 +483,8 @@ int pid2jid(pid_t pid)
 /* listjobs - Print the job list */
 void listjobs(struct job_t *jobs)
 {
+    printf("entered listjobs\n");
+
     int i;
 
     for (i = 0; i < MAXJOBS; i++) {
