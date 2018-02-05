@@ -52,10 +52,10 @@ tsh> jobs
 tsh> ./myspin 4 &
 [1] (26274) ./myspin 4 &
 tsh> ./myspin 5
-Job [2] (26276) stopped by signal 20
+Job [2] (26276)
 tsh> jobs
 [1] (26274) Running ./myspin 4 &
-[2] (26276) Stopped ./myspin 5 
+[2] (26276) Stopped ./myspin 5
 ./sdriver.pl -t trace09.txt -s ./tsh -a "-p"
 #
 # trace09.txt - Process bg builtin command
@@ -66,15 +66,15 @@ tsh> ./myspin 5
 Job [2] (26283) stopped by signal 20
 tsh> jobs
 [1] (26281) Running ./myspin 4 &
-[2] (26283) Stopped ./myspin 5 
+[2] (26283) Stopped ./myspin 5
 tsh> bg %2
-[2] (26283) ./myspin 5 
+[2] (26283) ./myspin 5
 tsh> jobs
 [1] (26281) Running ./myspin 4 &
-[2] (26283) Running ./myspin 5 
+[2] (26283) Running ./myspin 5
 ./sdriver.pl -t trace10.txt -s ./tsh -a "-p"
 #
-# trace10.txt - Process fg builtin command. 
+# trace10.txt - Process fg builtin command.
 #
 tsh> ./myspin 4 &
 [1] (26290) ./myspin 4 &
@@ -106,7 +106,7 @@ tsh> /bin/ps a
 tsh> ./mysplit 4
 Job [1] (26305) stopped by signal 20
 tsh> jobs
-[1] (26305) Stopped ./mysplit 4 
+[1] (26305) Stopped ./mysplit 4
 tsh> /bin/ps a
   PID TTY      STAT   TIME COMMAND
 25181 pts/3    S      0:00 -usr/local/bin/tcsh -i
@@ -125,7 +125,7 @@ tsh> /bin/ps a
 tsh> ./mysplit 4
 Job [1] (26313) stopped by signal 20
 tsh> jobs
-[1] (26313) Stopped ./mysplit 4 
+[1] (26313) Stopped ./mysplit 4
 tsh> /bin/ps a
   PID TTY      STAT   TIME COMMAND
 25181 pts/3    S      0:00 -usr/local/bin/tcsh -i

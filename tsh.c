@@ -166,6 +166,12 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline)
 {
+    sigset_t mask_all, mask_one; //prev_mask;
+
+    sigfillset(&mask_all);
+    sigemptyset(&mask_one);
+    sigaddset(&mask_one, SIGCHLD);
+
     char *argv[MAXARGS];
     char buf[MAXLINE];
     int bg;
@@ -178,7 +184,9 @@ void eval(char *cmdline)
       return; //ignore empty lines
 
     if(!builtin_cmd(argv)){
+        //sigprocmask(SIG_BLOCK, &mask_one, &prev_mask);
         if((pid = fork()) == 0){ // child runs user Job
+            setpgid(0, 0);
           if (execve(argv[0], argv, environ) < 0) {
               printf("%s: Command not found.\n", argv[0]);
               exit(0);
@@ -187,19 +195,27 @@ void eval(char *cmdline)
       }
 
         //parent waits for foreground job to terminate
+        //sigprocmask(SIG_BLOCK, &mask_one, &prev_mask);
         if(!bg){
           int status;
           if(addjob(jobs, pid, FG, cmdline)){
-            printf("adding job to job list FG\n");
+            //printf("adding job to job list FG\n");
           }
-          if(waitpid(pid, &status, 0) < 0){
-            unix_error("waitfg: waitpid error");
-          }
+          waitpid(pid, &status, 0);
+          //sigprocmask(SIG_BLOCK, &prev_mask, NULL);
         }
         else{
             printf("%d %s", pid, cmdline);
-            if(addjob(jobs, pid, BG, cmdline))
-              printf("added job to job list BG\n");
+            if(addjob(jobs, pid, BG, cmdline)){
+                for(unsigned int i = 0; i < MAXJOBS; i++){
+                    if(jobs[i].pid == pid){
+                        printf("[%d] (%d) %s", jobs[i].jid, jobs[i].pid, jobs[i].cmdline);
+                        break;
+                    }
+                }
+              //printf("added job to job list BG\n");
+          }
+          //sigprocmask(SIG_BLOCK, &prev_mask, NULL);
         }
 }
 
@@ -268,24 +284,24 @@ int builtin_cmd(char **argv)
 {
 
   if(!strcmp(argv[0], "jobs")){
-    printf("jobs\n");
+    //printf("jobs\n");
     listjobs(jobs);
     return 1;
   }
   else if(!strcmp(argv[0], "bg")){
-    printf("background\n");
+    //printf("background\n");
     return 1;
   }
   else if(!strcmp(argv[0], "fg")){
-    printf("foreground\n");
+    //printf("foreground\n");
     return 1;
   }
   else if(!strcmp(argv[0], "quit")){
-    printf("quit command\n");
-    return 1;
+    //printf("quit command\n");
+    exit(0);
   }
   else{
-    printf("exectue a program\n");
+    //printf("exectue a program\n");
   }
     return 0;     /* not a builtin command */
 }
@@ -295,6 +311,17 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv)
 {
+    int pid;
+    pid = argv[1];
+
+    if(argv[0] == "bg"){
+
+    }
+    else if(argv[0] == "fg"){
+
+    }
+
+
     return;
 }
 
@@ -303,6 +330,9 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    while(fgpid(jobs) == pid){
+         usleep(10000);
+    }
     return;
 }
 
@@ -319,6 +349,14 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig)
 {
+    // printf("child died\n");
+
+    int status;
+    int pid;
+    while((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0){
+        deletejob(jobs, pid);
+    }
+
     return;
 }
 
@@ -329,13 +367,18 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
-    printf("sigint - CTRL-c\n");
     for(unsigned int i = 0; i < MAXJOBS; i++){
-        if(jobs[i].state == 1)
-          kill(jobs[i].pid, SIGKILL);
+        if(jobs[i].state == 1){
+            if(kill(jobs[i].pid, SIGKILL) < 0){
+                printf("sigint_handler failed!\n");
+                perror("error");
+            }
+            else{
+                printf("Job [%d] (%d) %s", jobs[i].jid, jobs[i].pid, "Terminated by signal 2\n");
+            }
           return;
+      }
     }
-
     return;
 }
 
@@ -344,11 +387,23 @@ void sigint_handler(int sig)
  *     the user types ctrl-z at the keyboard. Catch it and suspend the
  *     foreground job by sending it a SIGTSTP.
  */
+
 void sigtstp_handler(int sig)
 {
-    printf("sigstp - CTRL-z\n");
-    // add job to the list
+    int pid = fgpid(jobs);
 
+    for(unsigned int i = 0; i < MAXJOBS; i++){
+        if(jobs[i].pid == pid){
+            if(kill(-pid, SIGTSTP) < 0){
+                printf("sigtstp failed\n");
+            }
+            else{
+                jobs[i].state = ST;
+                //printf("[%d] (%d) %s", jobs[i].jid, jobs[i].pid, "stopped by signal 20\n");
+            }
+            return;
+        }
+    }
     return;
 }
 
@@ -483,7 +538,7 @@ int pid2jid(pid_t pid)
 /* listjobs - Print the job list */
 void listjobs(struct job_t *jobs)
 {
-    printf("entered listjobs\n");
+    //printf("entered listjobs\n");
 
     int i;
 
@@ -505,6 +560,7 @@ void listjobs(struct job_t *jobs)
 			   i, jobs[i].state);
 	    }
 	    printf("%s", jobs[i].cmdline);
+        //printf("[%d] (%d) Running %s, jobs[i].jid, jobs[i].pid, jobs[i].cmdline)
 	}
     }
 }
@@ -569,6 +625,6 @@ handler_t *Signal(int signum, handler_t *handler)
  */
 void sigquit_handler(int sig)
 {
-    printf("Terminating after receipt of SIGQUIT signal\n");
+    printf("\nTerminating after receipt of SIGQUIT signal\n");
     exit(1);
 }
