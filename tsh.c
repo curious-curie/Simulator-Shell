@@ -237,7 +237,7 @@ int parseline(const char *cmdline, char **argv)
     strcpy(buf, cmdline);
     buf[strlen(buf)-1] = ' ';  /* replace trailing '\n' with space */
     while (*buf && (*buf == ' ')) /* ignore leading spaces */
-	buf++;
+	   buf++;
 
     /* Build the argv list */
     argc = 0;
@@ -246,7 +246,7 @@ int parseline(const char *cmdline, char **argv)
 	delim = strchr(buf, '\'');
     }
     else {
-	delim = strchr(buf, ' ');
+	       delim = strchr(buf, ' ');
     }
 
     while (delim) {
@@ -267,11 +267,11 @@ int parseline(const char *cmdline, char **argv)
     argv[argc] = NULL;
 
     if (argc == 0)  /* ignore blank line */
-	return 1;
+	   return 1;
 
     /* should the job run in the background? */
     if ((bg = (*argv[argc-1] == '&')) != 0) {
-	argv[--argc] = NULL;
+	       argv[--argc] = NULL;
     }
     return bg;
 }
@@ -282,22 +282,21 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv)
 {
+    printf("read builtin_cmd\n");
 
   if(!strcmp(argv[0], "jobs")){
-    //printf("jobs\n");
     listjobs(jobs);
     return 1;
   }
   else if(!strcmp(argv[0], "bg")){
-    //printf("background\n");
+    do_bgfg(argv);
     return 1;
   }
   else if(!strcmp(argv[0], "fg")){
-    //printf("foreground\n");
+    do_bgfg(argv);
     return 1;
   }
   else if(!strcmp(argv[0], "quit")){
-    //printf("quit command\n");
     exit(0);
   }
   else{
@@ -311,16 +310,15 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv)
 {
-    int pid;
-    pid = argv[1];
 
-    if(argv[0] == "bg"){
+    printf("command - %s pid = %s\n", argv[0], argv[1]);
 
-    }
-    else if(argv[0] == "fg"){
+    if(!strcmp(argv[0], "bg")){
 
     }
+    else if(!strcmp(argv[0], "fg")){
 
+    }
 
     return;
 }
@@ -350,7 +348,6 @@ void waitfg(pid_t pid)
 void sigchld_handler(int sig)
 {
     // printf("child died\n");
-
     int status;
     int pid;
     while((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0){
@@ -394,12 +391,12 @@ void sigtstp_handler(int sig)
 
     for(unsigned int i = 0; i < MAXJOBS; i++){
         if(jobs[i].pid == pid){
-            if(kill(-pid, SIGTSTP) < 0){
+            if(kill(pid, SIGTSTP) < 0){
                 printf("sigtstp failed\n");
             }
             else{
                 jobs[i].state = ST;
-                //printf("[%d] (%d) %s", jobs[i].jid, jobs[i].pid, "stopped by signal 20\n");
+                printf("[%d] (%d) %s", jobs[i].jid, jobs[i].pid, "stopped by signal 20\n");
             }
             return;
         }
