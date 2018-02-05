@@ -168,9 +168,6 @@ void eval(char *cmdline)
 {
     sigset_t mask;
 
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-
     char *argv[MAXARGS];
     char buf[MAXLINE];
     int bg;
@@ -186,7 +183,7 @@ void eval(char *cmdline)
         /* Parent blocks SIGCHLD signal */
         sigemptyset(&mask);
         sigaddset(&mask, SIGCHLD);
-        sigprocmask(SIG_BLOCK, &mask, 0);
+        sigprocmask(SIG_BLOCK, &mask, NULL);
         if((pid = fork()) == 0){ // child runs user Job
             setpgid(0, 0);
             sigprocmask(SIG_UNBLOCK, &mask, NULL);
@@ -195,21 +192,24 @@ void eval(char *cmdline)
               exit(0);
           }
         }
-      }
 
         //parent waits for foreground job to terminate
 
         if(!bg){
-          int status;
+          //int status;
           if(addjob(jobs, pid, FG, cmdline)){
 
           }
           sigprocmask(SIG_UNBLOCK, &mask, NULL);
-          waitpid(pid, &status, 0);
+          waitfg(pid);
+          //waitpid(pid, &status, 0);
 
         }
         else{
-            printf("%d %s", pid, cmdline);
+            addjob(jobs, pid, BG, cmdline);
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);
+            waitfg(pid);
+            /*printf("%d %s", pid, cmdline);
             if(addjob(jobs, pid, BG, cmdline)){
                 for(unsigned int i = 0; i < MAXJOBS; i++){
                     if(jobs[i].pid == pid){
@@ -217,10 +217,11 @@ void eval(char *cmdline)
                         break;
                     }
                 }
-              //printf("added job to job list BG\n");
-          }
-          //sigprocmask(SIG_BLOCK, &prev_mask, NULL);
+          }*/
+
         }
+    }
+    return;
 }
 
 /*
@@ -309,70 +310,118 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv)
 {
+    struct job_t *curr_job;
+    //Check if we get an id with cmd
+    if(argv[1] == NULL){
+        //fg command requires PID or %jobid argument
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
 
-    //printf("command - %s pid = %s\n", argv[0], argv[1]);
+    if(!isdigit(argv[1][0]) && argv[1][0] != '%'){
+        printf("%s: argument must be a PID or %%jobid\n",argv[0]);
+        return;
+    }
 
-    int jid, pid;
-    char *args = argv[1];
-    struct job_t * curr_job = NULL;
+    //Determine if the argument is a JID
+    int jid = 0;
+    if(argv[1][0] == '%'){
+        jid = 1;
+    }
 
-    //Paremeter is passed
-    if(args != NULL){
-        //Check if it is a JID
-        if(args[0] == '%' && isdigit(args[1])){
-            jid = atoi(&args[1]);
-
-            if(!(curr_job = getjobpid(jobs, jid))){
-                printf("%s: Job doesn't exist\n", args);
-                return;
-            }
+    if(jid){
+        curr_job = getjobjid(jobs, atoi(&argv[1][1]));
+        if(curr_job == NULL){
+            printf("%s: No such job\n", argv[1]);
+            return;
         }
-        else if(isdigit(*argv[1])){
-            pid = atoi(&args[0]);
-
-            if(!(curr_job = getjobpid(jobs,pid))){
-                printf("(%s): Job doesn't exist\n", argv[1]);
-                return;
-            }
-            else{
-                printf("%s: must include PID or JID in command\n", argv[0]);
-                return;
-            }
-        }
-        else{
-                printf("%s: argument must be a PID or JID", argv[0]);
+    }
+    else{
+        int pid = (pid_t) atoi(argv[1]);
+        curr_job = getjobpid(jobs, pid);
+        if(curr_job == NULL){
+            printf("%s: No such process\n", argv[1]);
+            return;
         }
     }
 
-    if(curr_job != NULL){
-        pid = curr_job->pid;
+    /*Check which command to implement*/
 
-        //if the job is in stopped state
-        if(curr_job->state == ST){
-            //background stopped
-            if(!strcmp(argv[0], "bg")){
-                printf("[%d] (%d) %s", curr_job->jid, curr_job->pid, curr_job->cmdline);
-                curr_job->state = BG;
-                kill(-pid, SIGCONT);
-            }
-
-            //foreground stopped
-            if(!strcmp(argv[0], "fg")){
-                curr_job->state = FG;
-                kill(-pid, SIGCONT);
-                waitfg(curr_job->pid);
-            }
-        }
-
-        //if job is in background and being brought to foreground
-        if(curr_job->state == BG){
-            if(!strcmp(argv[0], "fg")){
-                curr_job->state = FG;
-                waitfg(curr_job->pid);
-            }
-        }
+    //Check background
+    if(!strcmp(argv[0], "bg")){
+        curr_job->state = BG;
+        printf("[%d] (%d) %s", curr_job->jid, curr_job->pid, curr_job->cmdline);
+        kill(-curr_job->pid, SIGCONT);
     }
+    else if(!strcmp(argv[0], "fg")){
+        curr_job->state = FG;
+        kill(-curr_job->pid, SIGCONT);
+        waitfg(curr_job->pid);
+    }
+
     return;
+
+    // int jid, pid;
+    // char *args = argv[1];
+    // struct job_t * curr_job = NULL;
+    //
+    // //Paremeter is passed
+    // if(args != NULL){
+    //     //Check if it is a JID
+    //     if(args[0] == '%' && isdigit(args[1])){
+    //         jid = atoi(&args[1]);
+    //
+    //         if(!(curr_job = getjobpid(jobs, jid))){
+    //             printf("%s: Job doesn't exist\n", args);
+    //             return;
+    //         }
+    //     }
+    //     else if(isdigit(*argv[1])){
+    //         pid = atoi(&args[0]);
+    //
+    //         if(!(curr_job = getjobpid(jobs,pid))){
+    //             printf("(%s): Job doesn't exist\n", argv[1]);
+    //             return;
+    //         }
+    //         else{
+    //             printf("%s: must include PID or JID in command\n", argv[0]);
+    //             return;
+    //         }
+    //     }
+    //     else{
+    //             printf("%s: argument must be a PID or JID", argv[0]);
+    //     }
+    // }
+    //
+    // if(curr_job != NULL){
+    //     pid = curr_job->pid;
+    //
+    //     //if the job is in stopped state
+    //     if(curr_job->state == ST){
+    //         //background stopped
+    //         if(!strcmp(argv[0], "bg")){
+    //             printf("[%d] (%d) %s", curr_job->jid, curr_job->pid, curr_job->cmdline);
+    //             curr_job->state = BG;
+    //             kill(-pid, SIGCONT);
+    //         }
+    //
+    //         //foreground stopped
+    //         if(!strcmp(argv[0], "fg")){
+    //             curr_job->state = FG;
+    //             kill(-pid, SIGCONT);
+    //             waitfg(curr_job->pid);
+    //         }
+    //     }
+    //
+    //     //if job is in background and being brought to foreground
+    //     if(curr_job->state == BG){
+    //         if(!strcmp(argv[0], "fg")){
+    //             curr_job->state = FG;
+    //             waitfg(curr_job->pid);
+    //         }
+    //     }
+    // }
+    // return;
 }
 
 /*
